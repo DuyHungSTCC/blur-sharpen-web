@@ -2,117 +2,110 @@
 import React, { useState } from 'react';
 
 export default function Page() {
-  const [image, setImage] = useState(null);
-  const [processedImage, setProcessedImage] = useState(null);
-  const [kernelSize, setKernelSize] = useState(3);
-  const [centerValue, setCenterValue] = useState(5);
+  const [image, setImage] = useState<string | null>(null);
+  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const [centerValue, setCenterValue] = useState<number>(5);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImage(event.target.result);
-        setProcessedImage(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-  const generateSharpenKernel = (size, centerVal) => {
-    const kernel = [];
-    const offset = Math.floor(size / 2);
-    const sideVal = -1;
-    for (let y = 0; y < size; y++) {
-      const row = [];
-      for (let x = 0; x < size; x++) {
-        row.push((x === offset && y === offset) ? centerVal : sideVal);
+    const file = files[0];
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        setImage(event.target.result as string);
+        setProcessedImage(null);
       }
-      kernel.push(row);
-    }
-    return kernel;
+    };
+
+    reader.readAsDataURL(file);
   };
 
   const handleSharpen = () => {
-    if (!image || kernelSize < 1) return;
+    if (!image) return;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
     const img = new Image();
     img.src = image;
     img.onload = () => {
-      const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
+      ctx?.drawImage(img, 0, 0);
 
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const imageData = ctx?.getImageData(0, 0, canvas.width, canvas.height);
+      if (!imageData) return;
+
       const data = imageData.data;
-      const kernel = generateSharpenKernel(kernelSize, centerValue);
-      const width = canvas.width;
-      const height = canvas.height;
+      const width = imageData.width;
+      const height = imageData.height;
       const output = new Uint8ClampedArray(data);
-      const r = Math.floor(kernelSize / 2);
-      const index = (x, y, c) => ((y * width + x) * 4 + c);
 
-      for (let y = r; y < height - r; y++) {
-        for (let x = r; x < width - r; x++) {
+      const kernel = [
+        [ 0, -1,  0],
+        [-1, centerValue, -1],
+        [ 0, -1,  0]
+      ];
+      const factor = centerValue - 4;
+
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
           for (let c = 0; c < 3; c++) {
-            let newValue = 0;
-            for (let ky = -r; ky <= r; ky++) {
-              for (let kx = -r; kx <= r; kx++) {
-                newValue += data[index(x + kx, y + ky, c)] * kernel[ky + r][kx + r];
+            let sum = 0;
+            for (let ky = -1; ky <= 1; ky++) {
+              for (let kx = -1; kx <= 1; kx++) {
+                const px = ((y + ky) * width + (x + kx)) * 4 + c;
+                sum += data[px] * kernel[ky + 1][kx + 1];
               }
             }
-            output[index(x, y, c)] = Math.min(255, Math.max(0, newValue));
+            const index = (y * width + x) * 4 + c;
+            output[index] = Math.min(Math.max(sum / factor, 0), 255);
           }
+          output[(y * width + x) * 4 + 3] = data[(y * width + x) * 4 + 3];
         }
       }
 
-      for (let i = 0; i < data.length; i++) {
-        imageData.data[i] = output[i];
-      }
-
-      ctx.putImageData(imageData, 0, 0);
+      const outputImageData = new ImageData(output, width, height);
+      ctx?.putImageData(outputImageData, 0, 0);
       setProcessedImage(canvas.toDataURL());
     };
   };
 
   return (
-    <main style={{ padding: 20, maxWidth: 800, margin: 'auto' }}>
-      <h2>Ứng dụng làm sắc nét ảnh (Web)</h2>
+    <main className="p-4">
+      <h1 className="text-xl font-bold mb-4">Làm sắc nét ảnh (Sharpen)</h1>
       <input type="file" accept="image/*" onChange={handleImageUpload} />
-      <div style={{ marginTop: 10 }}>
-        <label>Kích thước nhân: </label>
-        <select value={kernelSize} onChange={(e) => setKernelSize(Number(e.target.value))}>
-          {[3, 5, 7].map(size => (
-            <option key={size} value={size}>{size} x {size}</option>
-          ))}
-        </select>
-        <div style={{ marginTop: 10 }}>
-          <label>Giá trị trung tâm: </label>
-          <input
-            type="number"
-            value={centerValue}
-            onChange={(e) => setCenterValue(Number(e.target.value))}
-            min={1}
-            max={99}
-          />
-        </div>
+      <div className="my-4">
+        <label className="mr-2">Giá trị trung tâm kernel:</label>
+        <input
+          type="number"
+          value={centerValue}
+          onChange={(e) => setCenterValue(Number(e.target.value))}
+          className="border px-2 py-1 w-20"
+        />
+        <button
+          onClick={handleSharpen}
+          className="ml-4 bg-blue-500 text-white px-4 py-2 rounded"
+        >
+          Xử lý
+        </button>
       </div>
-      <button style={{ marginTop: 10 }} onClick={handleSharpen}>Xử lý làm sắc nét</button>
-      {image && (
-        <div style={{ display: 'flex', gap: 20, marginTop: 30 }}>
-          <div style={{ flex: 1 }}>
-            <h4>Ảnh gốc:</h4>
-            <img src={image} alt="Original" style={{ width: '100%' }} />
+      <div className="flex gap-4">
+        {image && (
+          <div>
+            <p>Ảnh gốc:</p>
+            <img src={image} alt="Original" className="max-w-xs" />
           </div>
-          {processedImage && (
-            <div style={{ flex: 1 }}>
-              <h4>Ảnh sau khi xử lý:</h4>
-              <img src={processedImage} alt="Sharpened" style={{ width: '100%' }} />
-            </div>
-          )}
-        </div>
-      )}
+        )}
+        {processedImage && (
+          <div>
+            <p>Ảnh đã xử lý:</p>
+            <img src={processedImage} alt="Processed" className="max-w-xs" />
+          </div>
+        )}
+      </div>
     </main>
   );
 }
