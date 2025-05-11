@@ -7,7 +7,7 @@ export default function Page() {
   const [kernelSize, setKernelSize] = useState(3);
   const [centerValue, setCenterValue] = useState(5);
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
